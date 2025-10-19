@@ -1,0 +1,182 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Background Colors - Light, calming tones */
+  --background: #fafafa;
+  --background-secondary: #f5f5f5;
+  --background-tertiary: #ffffff;
+
+  /* Foreground/Text Colors */
+  --foreground: #171717;
+  --foreground-secondary: #525252;
+  --foreground-tertiary: #737373;
+
+  /* Primary Purple */
+  --primary: #a855f7;
+  --primary-hover: #9333ea;
+  --primary-foreground: #ffffff;
+
+  /* Secondary Teal */
+  --secondary: #14b8a6;
+  --secondary-hover: #0d9488;
+  --secondary-foreground: #ffffff;
+
+  /* Accent Gold */
+  --accent: #f59e0b;
+  --accent-hover: #d97706;
+  --accent-foreground: #ffffff;
+
+  /* Semantic Colors */
+  --success: #22c55e;
+  --warning: #eab308;
+  --error: #ef4444;
+  --info: #3b82f6;
+
+  /* UI Elements */
+  --muted: #f5f5f5;
+  --border: #e5e5e5;
+  --input: #e5e5e5;
+  --ring: #a855f7;
+
+  /* Shadows */
+  --shadow-purple: rgba(168, 85, 247, 0.15);
+}
+
+.dark {
+  /* Background Colors - Dark mode */
+  --background: #0a0a0a;
+  --background-secondary: #171717;
+  --background-tertiary: #262626;
+
+  /* Foreground/Text Colors */
+  --foreground: #fafafa;
+  --foreground-secondary: #d4d4d4;
+  --foreground-tertiary: #a3a3a3;
+
+  /* Primary Purple - Adjusted for dark mode */
+  --primary: #c084fc;
+  --primary-hover: #a855f7;
+  --primary-foreground: #0a0a0a;
+
+  /* Secondary Teal */
+  --secondary: #2dd4bf;
+  --secondary-hover: #14b8a6;
+  --secondary-foreground: #0a0a0a;
+
+  /* Accent Gold */
+  --accent: #fbbf24;
+  --accent-hover: #f59e0b;
+  --accent-foreground: #0a0a0a;
+
+  /* Semantic Colors */
+  --success: #22c55e;
+  --warning: #eab308;
+  --error: #ef4444;
+  --info: #3b82f6;
+
+  /* UI Elements */
+  --muted: #262626;
+  --border: #404040;
+  --input: #404040;
+  --ring: #c084fc;
+
+  /* Shadows */
+  --shadow-purple: rgba(192, 132, 252, 0.2);
+}
+
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--muted);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
+}
+
+/* Chat message animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.message-fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* Button loading state */
+.btn-loading {
+  position: relative;
+  color: transparent;
+}
+
+.btn-loading::after {
+  content: "";
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  top: 50%;
+  left: 50%;
+  margin-left: -8px;
+  margin-top: -8px;
+  border: 2px solid var(--primary-foreground);
+  border-radius: 50%;
+  border-top-color: transparent;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
