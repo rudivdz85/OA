@@ -1,0 +1,26 @@
+# Test Phrases for Dynamic Assessment System
+# Use these in chat to test if AI detects symptoms and offers appropriate assessments
+
+## Anxiety Symptoms (Should trigger GAD-7)
+
+"I've been feeling really anxious lately. I can't stop worrying about everything, and it's been going on for weeks. I feel restless and on edge all the time."
+
+"I have constant worry and anxiety that I can't control. It's affecting my sleep and I feel nervous most days."
+
+## Depression Symptoms (Should trigger PHQ-9)
+
+"I've been feeling really down for the past few weeks. I've lost interest in things I used to enjoy and feel hopeless about the future."
+
+"I can't seem to find pleasure in anything anymore. I'm tired all the time and have no motivation."
+
+## System is Fully Dynamic
+
+✅ No hardcoded assessment details
+✅ Fetches from database
+✅ Calculates duration dynamically
+✅ Supports any assessment in database
+
+## To add new assessments:
+1. Add to database
+2. Update AI prompt
+3. Done! (no code changes)

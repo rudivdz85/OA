@@ -34,6 +34,34 @@ Important guidelines:
 - Be culturally sensitive and inclusive
 - Focus on strengths and resilience while acknowledging struggles
 
+ASSESSMENT TRIGGERS:
+You can offer validated mental health assessments when appropriate. To trigger an assessment, use this marker format in your response:
+
+[ASSESSMENT_OFFER:ASSESSMENT_CODE]
+
+Available assessments:
+- GAD-7: For anxiety symptoms (worry, nervousness, panic, fear, restlessness, difficulty controlling worry)
+- PHQ-9: For depression symptoms (low mood, loss of interest, feelings of hopelessness, fatigue)
+
+Example usage for anxiety:
+"It sounds like you've been experiencing quite a bit of worry lately. The GAD-7 is a brief, validated assessment that can help us better understand the severity of your anxiety symptoms. Would you like to take it? It only takes a few minutes.
+
+[ASSESSMENT_OFFER:GAD-7]"
+
+Example usage for depression:
+"I hear that you've been feeling down and losing interest in things you used to enjoy. The PHQ-9 is a clinically validated screening tool that can help assess depression symptoms. Would you like to take it?
+
+[ASSESSMENT_OFFER:PHQ-9]"
+
+Guidelines for offering assessments:
+- Only offer when user mentions relevant symptoms
+- Symptoms should be recurring or persistent (not just a one-time event)
+- Don't offer the same assessment twice in one conversation
+- Offer only when it would genuinely help understand their situation
+- Be empathetic and explain why the assessment might be helpful
+
+After the user completes an assessment, you will receive the score and severity level. Provide supportive, empathetic feedback based on their results, explain what the score means, and offer appropriate next steps or coping strategies.
+
 Your goal is to make users feel heard, supported, and empowered to take steps toward better mental health.`;
 
 export interface GeminiMessage {
@@ -43,11 +71,42 @@ export interface GeminiMessage {
 
 export interface GeminiResponse {
   content: string;
+  assessmentOffer?: {
+    type: string;
+    code: string;
+  };
   usage?: {
     promptTokens: number;
     candidatesTokens: number;
     totalTokens: number;
   };
+}
+
+/**
+ * Parse assessment offer markers from AI response
+ */
+export function parseAssessmentOffer(content: string): {
+  cleanContent: string;
+  assessmentOffer?: { type: string; code: string };
+} {
+  // Match [ASSESSMENT_OFFER:CODE] or [ASSESSMENT_OFFER:CODE-WITH-HYPHEN]
+  const assessmentPattern = /\[ASSESSMENT_OFFER:([\w-]+)\]/g;
+  const match = assessmentPattern.exec(content);
+
+  if (match) {
+    const code = match[1];
+    const cleanContent = content.replace(assessmentPattern, '').trim();
+
+    return {
+      cleanContent,
+      assessmentOffer: {
+        type: 'offer',
+        code,
+      },
+    };
+  }
+
+  return { cleanContent: content };
 }
 
 /**
@@ -109,7 +168,10 @@ export async function generateGeminiResponse(
     });
 
     // Extract the response text
-    const content = response.text || '';
+    const rawContent = response.text || '';
+
+    // Parse for assessment offers
+    const { cleanContent, assessmentOffer } = parseAssessmentOffer(rawContent);
 
     // Get usage metadata if available
     const usage = response.usageMetadata
@@ -121,7 +183,8 @@ export async function generateGeminiResponse(
       : undefined;
 
     return {
-      content,
+      content: cleanContent,
+      assessmentOffer,
       usage,
     };
   } catch (error) {

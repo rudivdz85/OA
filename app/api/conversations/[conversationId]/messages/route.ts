@@ -131,13 +131,14 @@ export async function POST(
         content.trim()
       );
 
-      // Create assistant message
+      // Create assistant message with assessment offer metadata if present
       const assistantMessageInput: CreateMessageInput = {
         conversationId,
         role: 'assistant',
         content: aiResponse.content,
         metadata: {
           usage: aiResponse.usage,
+          assessmentOffer: aiResponse.assessmentOffer,
         },
       };
 

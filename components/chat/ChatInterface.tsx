@@ -3,6 +3,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { Message as MessageType } from '@/types';
 import Message from './Message';
+import { AssessmentOffer } from './AssessmentOffer';
+import { AssessmentQuiz } from './AssessmentQuiz';
+import { AssessmentResult } from './AssessmentResult';
 import { Send, Loader2 } from 'lucide-react';
 
 interface ChatInterfaceProps {
@@ -17,6 +20,8 @@ export default function ChatInterface({
   const [messages, setMessages] = useState<MessageType[]>(initialMessages);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [activeAssessment, setActiveAssessment] = useState<any>(null);
+  const [completedAssessmentResult, setCompletedAssessmentResult] = useState<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -27,7 +32,7 @@ export default function ChatInterface({
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages, activeAssessment, completedAssessmentResult]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -37,15 +42,89 @@ export default function ChatInterface({
     }
   }, [input]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleStartAssessment = async (assessmentCode: string) => {
+    try {
+      // Get assessment type by code
+      const typeResponse = await fetch(`/api/assessments/types/${assessmentCode}`);
+      if (!typeResponse.ok) {
+        throw new Error('Failed to fetch assessment type');
+      }
+      const typeData = await typeResponse.json();
 
-    if (!input.trim() || isLoading) {
-      return;
+      // Create new assessment
+      const createResponse = await fetch('/api/assessments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assessmentTypeId: typeData.data.id,
+          conversationId,
+        }),
+      });
+
+      if (!createResponse.ok) {
+        throw new Error('Failed to create assessment');
+      }
+
+      const createData = await createResponse.json();
+
+      // Set active assessment with type info
+      setActiveAssessment({
+        ...createData.data,
+        assessmentType: typeData.data,
+      });
+    } catch (error) {
+      console.error('Error starting assessment:', error);
+      alert('Failed to start assessment. Please try again.');
     }
+  };
 
-    const userContent = input.trim();
-    setInput('');
+  const handleCompleteAssessment = async (answers: Array<{ questionId: number; answer: number; timestamp: string }>) => {
+    if (!activeAssessment) return;
+
+    try {
+      const response = await fetch(`/api/assessments/${activeAssessment.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          answers,
+          complete: true,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to complete assessment');
+      }
+
+      const data = await response.json();
+
+      // Store result for display
+      setCompletedAssessmentResult({
+        assessment: {
+          ...data.data,
+          assessmentType: activeAssessment.assessmentType,
+        },
+        interpretation: data.result.interpretation,
+        recommendation: data.result.recommendation,
+      });
+
+      // Clear active assessment
+      setActiveAssessment(null);
+
+      // Send assessment result to AI for feedback
+      const scoreMessage = `I just completed the ${activeAssessment.assessmentType.name}. My score was ${data.result.score} out of ${activeAssessment.assessmentType.maxScore}, which indicates ${data.result.severityLevel} severity.`;
+
+      await sendMessage(scoreMessage);
+    } catch (error) {
+      console.error('Error completing assessment:', error);
+      alert('Failed to submit assessment. Please try again.');
+    }
+  };
+
+  const handleCancelAssessment = () => {
+    setActiveAssessment(null);
+  };
+
+  const sendMessage = async (content: string) => {
     setIsLoading(true);
 
     try {
@@ -56,7 +135,7 @@ export default function ChatInterface({
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ content: userContent }),
+          body: JSON.stringify({ content }),
         }
       );
 
@@ -81,8 +160,21 @@ export default function ChatInterface({
       alert('Failed to send message. Please try again.');
     } finally {
       setIsLoading(false);
-      textareaRef.current?.focus();
     }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!input.trim() || isLoading) {
+      return;
+    }
+
+    const userContent = input.trim();
+    setInput('');
+
+    await sendMessage(userContent);
+    textareaRef.current?.focus();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -123,8 +215,42 @@ export default function ChatInterface({
         ) : (
           <div className="max-w-4xl mx-auto">
             {messages.map((message) => (
-              <Message key={message.id} message={message} />
+              <div key={message.id}>
+                <Message message={message} />
+
+                {/* Render assessment offer if present in metadata */}
+                {message.role === 'assistant' &&
+                  message.metadata?.assessmentOffer && (
+                    <AssessmentOffer
+                      assessmentCode={message.metadata.assessmentOffer.code}
+                      onAccept={() =>
+                        handleStartAssessment(message.metadata.assessmentOffer.code)
+                      }
+                      onDecline={() => {
+                        // Just a visual dismissal - no backend action needed
+                      }}
+                    />
+                  )}
+              </div>
             ))}
+
+            {/* Active assessment quiz */}
+            {activeAssessment && (
+              <AssessmentQuiz
+                assessment={activeAssessment}
+                onComplete={handleCompleteAssessment}
+                onCancel={handleCancelAssessment}
+              />
+            )}
+
+            {/* Completed assessment result */}
+            {completedAssessmentResult && (
+              <AssessmentResult
+                assessment={completedAssessmentResult.assessment}
+                interpretation={completedAssessmentResult.interpretation}
+                recommendation={completedAssessmentResult.recommendation}
+              />
+            )}
 
             {isLoading && (
               <div className="flex gap-3 mb-6">
