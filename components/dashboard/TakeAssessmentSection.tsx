@@ -78,6 +78,7 @@ export default function TakeAssessmentSection() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           content: messageText,
+          stream: false, // Don't stream from dashboard, just create the message
         }),
       });
 

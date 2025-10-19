@@ -203,6 +203,65 @@ export async function generateGeminiResponse(
 }
 
 /**
+ * Generates a STREAMING response from Gemini based on conversation history
+ */
+export async function* generateGeminiStreamingResponse(
+  messages: Message[],
+  userMessage: string
+): AsyncGenerator<string> {
+  try {
+    // Convert conversation history to Gemini format
+    let history = convertMessagesToGeminiFormat(messages);
+
+    // For the first message, prepend system instructions
+    if (history.length === 0) {
+      history = [
+        {
+          role: 'user',
+          parts: [{ text: `${SYSTEM_PROMPT}\n\nPlease acknowledge your role as a mental health coach.` }],
+        },
+        {
+          role: 'model',
+          parts: [{ text: 'I understand. I am here as a compassionate AI mental health coach to provide empathetic, non-judgmental support and guidance. How can I help you today?' }],
+        },
+      ];
+    }
+
+    // Build the full conversation including history and new message
+    const contents = [
+      ...history,
+      {
+        role: 'user',
+        parts: [{ text: userMessage }],
+      },
+    ];
+
+    // Generate streaming content using the new SDK
+    const streamingResponse = await ai.models.generateContentStream({
+      model: 'gemini-2.0-flash-exp',
+      contents: contents as any,
+      config: {
+        maxOutputTokens: 1000,
+        temperature: 0.7,
+        topP: 0.95,
+        topK: 40,
+      },
+    });
+
+    // Stream the response chunks
+    for await (const chunk of streamingResponse) {
+      const chunkText = chunk.text || '';
+      if (chunkText) {
+        yield chunkText;
+      }
+    }
+  } catch (error) {
+    console.error('Error generating Gemini streaming response:', error);
+    throw new Error('Failed to generate AI response. Please try again.');
+  }
+}
+
+/**
  * Generates a conversation title based on the first message
  */
 export async function generateConversationTitle(
