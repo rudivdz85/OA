@@ -356,3 +356,147 @@ export const abandonAssessment = async (
 
   return (result ?? null) as Assessment | null;
 };
+
+// ==========================================
+// Dashboard & History Queries
+// ==========================================
+
+/** Get full assessment history with type information for dashboard */
+export const getUserAssessmentHistory = async (userId: string) => {
+  const results = await db
+    .select({
+      id: assessments.id,
+      userId: assessments.userId,
+      conversationId: assessments.conversationId,
+      assessmentTypeId: assessments.assessmentTypeId,
+      score: assessments.score,
+      severityLevel: assessments.severityLevel,
+      status: assessments.status,
+      completedAt: assessments.completedAt,
+      createdAt: assessments.createdAt,
+      assessmentTypeName: assessmentTypes.name,
+      assessmentTypeCode: assessmentTypes.code,
+      assessmentTypeCategory: assessmentTypes.category,
+      minScore: assessmentTypes.minScore,
+      maxScore: assessmentTypes.maxScore,
+    })
+    .from(assessments)
+    .innerJoin(assessmentTypes, eq(assessments.assessmentTypeId, assessmentTypes.id))
+    .where(and(eq(assessments.userId, userId), eq(assessments.status, 'completed')))
+    .orderBy(desc(assessments.completedAt));
+
+  return results;
+};
+
+/** Calculate assessment statistics for user */
+export const getUserAssessmentStats = async (userId: string) => {
+  // Get all completed assessments
+  const completedAssessments = await db
+    .select()
+    .from(assessments)
+    .where(and(eq(assessments.userId, userId), eq(assessments.status, 'completed')))
+    .orderBy(assessments.completedAt);
+
+  const total = completedAssessments.length;
+
+  if (total === 0) {
+    return {
+      totalAssessments: 0,
+      averageScore: null,
+      latestScore: null,
+      latestSeverity: null,
+      latestDate: null,
+      firstScore: null,
+      improvement: null,
+      trend: 'none' as const,
+    };
+  }
+
+  // Calculate average score
+  const scores = completedAssessments
+    .map(a => a.score)
+    .filter((score): score is number => score !== null);
+
+  const averageScore = scores.length > 0
+    ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length)
+    : null;
+
+  // Get latest assessment
+  const latest = completedAssessments[completedAssessments.length - 1];
+  const latestScore = latest?.score ?? null;
+  const latestSeverity = latest?.severityLevel ?? null;
+  const latestDate = latest?.completedAt ?? null;
+
+  // Get first assessment for comparison
+  const first = completedAssessments[0];
+  const firstScore = first?.score ?? null;
+
+  // Calculate improvement percentage
+  let improvement: number | null = null;
+  let trend: 'improving' | 'stable' | 'worsening' | 'none' = 'none';
+
+  if (firstScore !== null && latestScore !== null && total >= 2) {
+    // Lower scores are better for anxiety/depression, so improvement means score decreased
+    const change = firstScore - latestScore;
+
+    // Handle edge case: if first score is 0, calculate based on absolute change
+    if (firstScore === 0) {
+      // If starting from 0, any increase is worsening
+      if (latestScore > 0) {
+        trend = 'worsening';
+        improvement = -100; // Represents worsening from baseline of 0
+      } else {
+        trend = 'stable';
+        improvement = 0;
+      }
+    } else {
+      // Normal calculation: percentage change from first score
+      improvement = Math.round((change / firstScore) * 100);
+
+      if (improvement > 10) {
+        trend = 'improving';
+      } else if (improvement < -10) {
+        trend = 'worsening';
+      } else {
+        trend = 'stable';
+      }
+    }
+  }
+
+  return {
+    totalAssessments: total,
+    averageScore,
+    latestScore,
+    latestSeverity,
+    latestDate,
+    firstScore,
+    improvement,
+    trend,
+  };
+};
+
+/** Get assessment by ID with full details (for detail page) */
+export const getAssessmentDetails = async (
+  assessmentId: string,
+  userId: string
+) => {
+  const [assessment] = await db
+    .select()
+    .from(assessments)
+    .where(and(eq(assessments.id, assessmentId), eq(assessments.userId, userId)))
+    .limit(1);
+
+  if (!assessment) return null;
+
+  // Get assessment type details
+  const [assessmentType] = await db
+    .select()
+    .from(assessmentTypes)
+    .where(eq(assessmentTypes.id, assessment.assessmentTypeId))
+    .limit(1);
+
+  return {
+    assessment: assessment as Assessment,
+    assessmentType,
+  };
+};

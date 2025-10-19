@@ -1,46 +1,31 @@
-'use client';
-
-import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { Suspense } from 'react';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth/config';
+import { redirect } from 'next/navigation';
+import { getUserAssessmentStats, getUserAssessmentHistory } from '@/lib/db/queries';
+import { AssessmentStats } from '@/components/dashboard/AssessmentStats';
+import { AssessmentChart } from '@/components/dashboard/AssessmentChart';
 import ConversationList from '@/components/dashboard/ConversationList';
+import Link from 'next/link';
+import { MessageCircle, FileText, ArrowRight, TrendingUp } from 'lucide-react';
+import StartConversationButton from '@/components/dashboard/StartConversationButton';
+import TakeAssessmentSection from '@/components/dashboard/TakeAssessmentSection';
 
-export default function DashboardPage() {
-  const { data: session } = useSession();
-  const router = useRouter();
-  const [isCreatingConversation, setIsCreatingConversation] = useState(false);
+async function DashboardContent() {
+  const session = await getServerSession(authOptions);
 
-  const handleStartConversation = async () => {
-    setIsCreatingConversation(true);
+  if (!session?.user?.id) {
+    redirect('/auth/signin');
+  }
 
-    try {
-      const response = await fetch('/api/conversations', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({}),
-      });
+  // Fetch assessment data in parallel
+  const [stats, assessmentHistory] = await Promise.all([
+    getUserAssessmentStats(session.user.id),
+    getUserAssessmentHistory(session.user.id),
+  ]);
 
-      if (!response.ok) {
-        throw new Error('Failed to create conversation');
-      }
-
-      const data = await response.json();
-      if (data.success && data.data) {
-        router.push(`/dashboard/chat/${data.data.id}`);
-      }
-    } catch (error) {
-      console.error('Error creating conversation:', error);
-      alert('Failed to create conversation. Please try again.');
-      setIsCreatingConversation(false);
-    }
-  };
-
-  const handleTakeAssessment = () => {
-    // TODO: Navigate to assessment selection page
-    alert('Assessment feature will be implemented next!');
-  };
+  // Get recent assessments (last 5)
+  const recentAssessments = assessmentHistory.slice(0, 5);
 
   return (
     <div className="space-y-8">
@@ -54,9 +39,7 @@ export default function DashboardPage() {
             <h2 className="text-3xl font-bold">
               Welcome back, {session?.user?.name?.split(' ')[0] || 'there'}!
             </h2>
-            <p className="text-primary-100 mt-1">
-              How are you feeling today?
-            </p>
+            <p className="text-primary-100 mt-1">How are you feeling today?</p>
           </div>
         </div>
         <p className="text-white/90 max-w-2xl">
@@ -65,25 +48,21 @@ export default function DashboardPage() {
         </p>
       </div>
 
+      {/* Statistics Cards */}
+      {stats.totalAssessments > 0 && (
+        <div>
+          <h3 className="text-xl font-bold text-neutral-900 mb-4">Your Progress</h3>
+          <AssessmentStats stats={stats} />
+        </div>
+      )}
+
       {/* Quick Actions */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Start Conversation Card */}
         <div className="group bg-white rounded-2xl p-6 border-2 border-primary-200 hover:border-primary-400 hover:shadow-purple-lg transition-all duration-200">
           <div className="flex items-start justify-between mb-4">
             <div className="w-14 h-14 bg-gradient-primary rounded-xl flex items-center justify-center shadow-purple-md group-hover:scale-110 transition-transform duration-200">
-              <svg
-                className="w-7 h-7 text-white"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
-                />
-              </svg>
+              <MessageCircle className="w-7 h-7 text-white" />
             </div>
             <span className="bg-primary-100 text-primary-700 text-xs font-semibold px-3 py-1 rounded-full">
               Most Popular
@@ -94,130 +73,154 @@ export default function DashboardPage() {
             Talk to your AI coach about anything on your mind. Get supportive, empathetic guidance
             tailored to your needs.
           </p>
-          <button
-            onClick={handleStartConversation}
-            disabled={isCreatingConversation}
-            className="w-full bg-gradient-primary hover:shadow-purple-lg text-white font-semibold py-3 px-4 rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 group-hover:scale-105"
-          >
-            {isCreatingConversation ? (
-              <>
-                <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
-                Creating...
-              </>
-            ) : (
-              <>
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 4v16m8-8H4"
-                  />
-                </svg>
-                New Conversation
-              </>
-            )}
-          </button>
+          <StartConversationButton />
         </div>
 
         {/* Take Assessment Card */}
-        <div className="group bg-white rounded-2xl p-6 border-2 border-secondary-200 hover:border-secondary-400 hover:shadow-purple-lg transition-all duration-200">
-          <div className="flex items-start justify-between mb-4">
-            <div className="w-14 h-14 bg-gradient-secondary rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform duration-200">
-              <svg
-                className="w-7 h-7 text-white"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
-                />
-              </svg>
-            </div>
-            <span className="bg-secondary-100 text-secondary-700 text-xs font-semibold px-3 py-1 rounded-full">
-              Track Progress
-            </span>
-          </div>
-          <h3 className="text-2xl font-bold text-neutral-900 mb-2">Take an Assessment</h3>
-          <p className="text-neutral-600 mb-6 leading-relaxed">
-            Complete validated assessments like GAD-7 or PHQ-9 to track your anxiety and depression
-            symptoms over time.
-          </p>
-          <button
-            onClick={handleTakeAssessment}
-            className="w-full bg-gradient-secondary hover:shadow-lg text-white font-semibold py-3 px-4 rounded-xl transition-all duration-200 flex items-center justify-center gap-2 group-hover:scale-105"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-            Start Assessment
-          </button>
-        </div>
+        <TakeAssessmentSection />
       </div>
+
+      {/* Assessment Progress Chart */}
+      {assessmentHistory.length > 0 && (
+        <div className="bg-white rounded-2xl shadow-sm p-6 border border-secondary-100">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h3 className="text-2xl font-bold text-neutral-900 flex items-center gap-2">
+                <TrendingUp className="w-6 h-6 text-secondary-600" />
+                Progress Over Time
+              </h3>
+              <p className="text-neutral-600 text-sm mt-1">
+                Tracking your mental health journey
+              </p>
+            </div>
+            <Link
+              href="/dashboard/assessments"
+              className="text-secondary-600 hover:text-secondary-700 text-sm font-semibold hover:underline flex items-center gap-1"
+            >
+              View all
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+          <AssessmentChart assessments={assessmentHistory} />
+        </div>
+      )}
 
       {/* Recent Conversations */}
       <div className="bg-white rounded-2xl shadow-sm p-6 border border-primary-100">
         <div className="mb-6">
           <h3 className="text-2xl font-bold text-neutral-900">Your Conversations</h3>
-          <p className="text-neutral-600 text-sm mt-1">Continue where you left off or start a new chat</p>
+          <p className="text-neutral-600 text-sm mt-1">
+            Continue where you left off or start a new chat
+          </p>
         </div>
-
         <ConversationList />
       </div>
 
-      {/* Assessment History */}
+      {/* Recent Assessment History */}
       <div className="bg-white rounded-2xl shadow-sm p-6 border border-secondary-100">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h3 className="text-2xl font-bold text-neutral-900">Assessment History</h3>
-            <p className="text-neutral-600 text-sm mt-1">Track your mental health over time</p>
+            <h3 className="text-2xl font-bold text-neutral-900">Recent Assessments</h3>
+            <p className="text-neutral-600 text-sm mt-1">
+              {stats.totalAssessments > 0
+                ? `${stats.totalAssessments} assessment${stats.totalAssessments !== 1 ? 's' : ''} completed`
+                : 'Track your mental health over time'}
+            </p>
           </div>
-          <button className="text-secondary-600 hover:text-secondary-700 text-sm font-semibold hover:underline">
-            View all
-          </button>
+          {stats.totalAssessments > 0 && (
+            <Link
+              href="/dashboard/assessments"
+              className="text-secondary-600 hover:text-secondary-700 text-sm font-semibold hover:underline flex items-center gap-1"
+            >
+              View all
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          )}
         </div>
 
-        {/* Placeholder for assessments */}
-        <div className="text-center py-16">
-          <div className="w-20 h-20 bg-gradient-to-br from-secondary-100 to-accent-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg
-              className="w-10 h-10 text-secondary-500"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
-              />
-            </svg>
+        {recentAssessments.length === 0 ? (
+          <div className="text-center py-16">
+            <div className="w-20 h-20 bg-gradient-to-br from-secondary-100 to-accent-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <FileText className="w-10 h-10 text-secondary-500" />
+            </div>
+            <p className="text-neutral-900 font-semibold mb-1">No assessments completed</p>
+            <p className="text-neutral-600 text-sm mb-4">
+              Take your first assessment to track your well-being over time
+            </p>
+            <p className="text-neutral-600 text-sm">
+              Start a conversation with the AI coach and it will recommend assessments based on your needs.
+            </p>
           </div>
-          <p className="text-neutral-900 font-semibold mb-1">No assessments completed</p>
-          <p className="text-neutral-600 text-sm mb-4">
-            Take your first assessment to track your well-being over time
-          </p>
-          <button
-            onClick={handleTakeAssessment}
-            className="inline-flex items-center gap-2 text-secondary-600 hover:text-secondary-700 font-semibold text-sm"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            Take an assessment
-          </button>
-        </div>
+        ) : (
+          <div className="space-y-3">
+            {recentAssessments.map(assessment => (
+              <Link
+                key={assessment.id}
+                href={`/dashboard/assessments/${assessment.id}`}
+                className="block p-4 border border-gray-200 rounded-lg hover:border-secondary-300 hover:bg-secondary-50 transition-colors"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3 flex-1">
+                    <div className="w-10 h-10 bg-secondary-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <FileText className="w-5 h-5 text-secondary-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h4 className="font-semibold text-gray-900">
+                          {assessment.assessmentTypeName}
+                        </h4>
+                        <span className="px-2 py-0.5 bg-gray-100 text-gray-700 text-xs font-medium rounded">
+                          {assessment.assessmentTypeCode}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-600">
+                        {assessment.completedAt
+                          ? new Date(assessment.completedAt).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric',
+                            })
+                          : 'Date unknown'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="text-right">
+                      <div className="font-bold text-lg text-gray-900">
+                        {assessment.score}
+                      </div>
+                      {assessment.severityLevel && (
+                        <div className="text-xs text-gray-600 capitalize">
+                          {assessment.severityLevel.replace('_', ' ')}
+                        </div>
+                      )}
+                    </div>
+                    <ArrowRight className="w-5 h-5 text-gray-400" />
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
     </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="space-y-8 animate-pulse">
+          <div className="h-48 bg-gray-200 rounded-2xl"></div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="h-64 bg-gray-200 rounded-2xl"></div>
+            <div className="h-64 bg-gray-200 rounded-2xl"></div>
+          </div>
+        </div>
+      }
+    >
+      <DashboardContent />
+    </Suspense>
   );
 }
