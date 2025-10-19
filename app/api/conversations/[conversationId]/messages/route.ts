@@ -15,8 +15,8 @@ import {
   parseAssessmentOffer,
 } from '@/lib/ai/gemini';
 import { CreateMessageInput } from '@/types';
-import { formatSSE, parseStreamChunk } from '@/lib/utils/stream';
-import { checkForMilestone, formatMilestoneForStream } from '@/lib/assessments/achievements';
+import { formatSSE } from '@/lib/utils/stream';
+import { checkForMilestone } from '@/lib/assessments/achievements';
 
 /**
  * GET /api/conversations/[conversationId]/messages
@@ -249,11 +249,7 @@ async function handleStreamingResponse(
         // Check for milestone if recent assessment completed
         let milestoneData = null;
         if (recentAssessmentId) {
-          console.log('[API] Checking milestone for assessment:', recentAssessmentId);
           milestoneData = await checkForMilestone(userId, recentAssessmentId);
-          console.log('[API] Milestone result:', milestoneData);
-        } else {
-          console.log('[API] No recentAssessmentId provided');
         }
 
         // Stream AI response

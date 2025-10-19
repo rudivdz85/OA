@@ -8,11 +8,9 @@ export async function GET(
   context: { params: { code: string } }
 ) {
   try {
-    console.log('[Assessment Type Route] Starting...');
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.id) {
-      console.log('[Assessment Type Route] Unauthorized');
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
@@ -20,9 +18,7 @@ export async function GET(
     }
 
     const code = context.params.code;
-    console.log('[Assessment Type Route] Fetching type for code:', code);
     const assessmentType = await getAssessmentTypeByCode(code);
-    console.log('[Assessment Type Route] Found type:', assessmentType ? 'Yes' : 'No');
 
     if (!assessmentType) {
       return NextResponse.json(

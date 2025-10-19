@@ -95,13 +95,6 @@ export async function checkForMilestone(
     const previousScore = previousAssessment.score!;
     const scoreChange = previousScore - currentScore; // Positive means improvement (lower is better)
 
-    console.log('[Milestone Detection]', {
-      previousScore,
-      currentScore,
-      scoreChange,
-      assessmentCode,
-    });
-
     // Check for significant score improvement (5+ points better)
     if (scoreChange >= 5) {
       return {
@@ -179,12 +172,4 @@ function checkIfConsistencyMilestoneShown(userId: string, assessmentTypeId: stri
 
 function markConsistencyMilestoneShown(userId: string, assessmentTypeId: string): void {
   consistencyMilestonesShown.add(`${userId}:${assessmentTypeId}`);
-}
-
-/**
- * Format milestone data for injection into AI stream
- */
-export function formatMilestoneForStream(milestone: MilestoneData): string {
-  const data = JSON.stringify(milestone);
-  return `[COMPONENT:MILESTONE:${data}]`;
 }

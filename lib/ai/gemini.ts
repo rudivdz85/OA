@@ -5,11 +5,7 @@ if (!process.env.GEMINI_API_KEY) {
   throw new Error('GEMINI_API_KEY environment variable is not set');
 }
 
-// Verify API key is loaded (without logging the actual key)
-console.log('Gemini API Key loaded:', process.env.GEMINI_API_KEY ? 'Yes' : 'No');
-console.log('Gemini API Key length:', process.env.GEMINI_API_KEY?.length || 0);
-
-// Initialize the new Google GenAI SDK
+// Initialize the Google GenAI SDK
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 const SYSTEM_PROMPT = `You are a compassionate and professional AI mental health coach. Your role is to:

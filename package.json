@@ -1,13 +1,41 @@
 {
-  "name": "ai-coaching-platform",
-  "version": "0.1.0",
+  "name": "ollieai",
+  "version": "1.0.0",
+  "description": "AI-powered mental health coaching platform with validated clinical assessments, real-time AI conversations, and progress tracking",
+  "author": "Rudi van der Zee <rudiv85@gmail.com>",
+  "license": "N/A",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rudivdz85/OA.git"
+  },
+  "keywords": [
+    "mental-health",
+    "ai-coaching",
+    "anxiety-assessment",
+    "gad-7",
+    "phq-9",
+    "gemini-ai",
+    "nextjs",
+    "typescript",
+    "mental-wellness",
+    "therapy-support",
+    "progress-tracking"
+  ],
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
     "type-check": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
+    "db:seed": "tsx scripts/seed.ts",
     "test:db": "node scripts/test-db.js"
   },
   "dependencies": {

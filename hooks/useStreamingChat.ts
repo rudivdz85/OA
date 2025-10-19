@@ -25,8 +25,6 @@ export function useStreamingChat({ conversationId, onMilestone }: UseStreamingCh
       content: string,
       recentAssessmentId?: string
     ): Promise<{ userMessage: MessageType; assistantMessage: MessageType } | null> => {
-      console.log('[Streaming] Starting stream for message:', content);
-      console.log('[Streaming] Recent assessment ID:', recentAssessmentId);
       setIsStreaming(true);
       setStreamingText('');
 
@@ -34,23 +32,18 @@ export function useStreamingChat({ conversationId, onMilestone }: UseStreamingCh
       abortControllerRef.current = new AbortController();
 
       try {
-        const requestBody = {
-          content,
-          stream: true,
-          recentAssessmentId,
-        };
-        console.log('[Streaming] Request body:', requestBody);
-
         const response = await fetch(`/api/conversations/${conversationId}/messages`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify(requestBody),
+          body: JSON.stringify({
+            content,
+            stream: true,
+            recentAssessmentId,
+          }),
           signal: abortControllerRef.current.signal,
         });
-
-        console.log('[Streaming] Response received, status:', response.status);
 
         if (!response.ok) {
           throw new Error('Failed to send message');
@@ -66,8 +59,6 @@ export function useStreamingChat({ conversationId, onMilestone }: UseStreamingCh
         let assessmentOffer: any = null;
         accumulatedTextRef.current = '';
 
-        console.log('[Streaming] Starting to read stream chunks...');
-
         // Use requestAnimationFrame for smooth, 60fps updates
         const scheduleUpdate = () => {
           if (pendingUpdateRef.current) return; // Already scheduled
@@ -81,30 +72,24 @@ export function useStreamingChat({ conversationId, onMilestone }: UseStreamingCh
 
         // Process the stream
         for await (const chunk of parseSSEStream(reader)) {
-          console.log('[Streaming] Received chunk:', chunk);
-
           if (chunk.type === 'text') {
             // Append text to accumulated buffer
             if (chunk.content) {
               accumulatedTextRef.current += chunk.content;
               scheduleUpdate(); // Schedule debounced UI update
-              console.log('[Streaming] Accumulated text length:', accumulatedTextRef.current.length);
             }
 
             // Check for user message ID in first chunk
             if (chunk.componentData?.userMessageId) {
               userMessageId = chunk.componentData.userMessageId;
-              console.log('[Streaming] User message ID:', userMessageId);
             }
           } else if (chunk.type === 'component') {
             // Handle component injection
-            console.log('[Streaming] Component detected:', chunk.componentType);
             if (chunk.componentType === 'MILESTONE' && chunk.componentData) {
               onMilestone?.(chunk.componentData as MilestoneData);
             }
           } else if (chunk.type === 'done') {
             // Stream completed
-            console.log('[Streaming] Stream done');
             if (chunk.componentData) {
               assistantMessageId = chunk.componentData.assistantMessageId;
               assessmentOffer = chunk.componentData.assessmentOffer;
@@ -121,8 +106,6 @@ export function useStreamingChat({ conversationId, onMilestone }: UseStreamingCh
         }
         pendingUpdateRef.current = false;
         setStreamingText(accumulatedTextRef.current);
-
-        console.log('[Streaming] Stream completed, final text length:', accumulatedTextRef.current.length);
 
         // Return message data
         const finalText = accumulatedTextRef.current;
@@ -149,9 +132,7 @@ export function useStreamingChat({ conversationId, onMilestone }: UseStreamingCh
           } as MessageType,
         };
       } catch (error: any) {
-        if (error.name === 'AbortError') {
-          console.log('Stream aborted');
-        } else {
+        if (error.name !== 'AbortError') {
           console.error('Error in streaming chat:', error);
           throw error;
         }
