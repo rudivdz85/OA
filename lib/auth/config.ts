@@ -7,7 +7,9 @@ import { accounts, sessions, users, verificationTokens } from '@/lib/db/schema';
 export const authOptions: AuthOptions = {
   adapter: DrizzleAdapter(db, {
     usersTable: users,
+    // @ts-expect-error - DrizzleAdapter type incompatibility with custom schema
     accountsTable: accounts,
+    // @ts-expect-error - DrizzleAdapter type incompatibility with custom schema
     sessionsTable: sessions,
     verificationTokensTable: verificationTokens,
   }) as any,

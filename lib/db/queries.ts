@@ -1,5 +1,7 @@
-import { neon } from '@neondatabase/serverless';
-import {
+import { db } from './client';
+import { conversations, messages } from './schema';
+import { eq, desc, and, sql, count } from 'drizzle-orm';
+import type {
   Conversation,
   ConversationWithMessages,
   Message,
@@ -8,282 +10,157 @@ import {
   CreateMessageInput,
 } from '@/types';
 
-if (!process.env.DATABASE_URL) {
-  throw new Error('DATABASE_URL environment variable is not set');
-}
-
-const sql = neon(process.env.DATABASE_URL);
-
 // ==========================================
 // Conversation Queries
 // ==========================================
 
-/**
- * Get all conversations for a user, ordered by most recent
- */
-export async function getUserConversations(
-  userId: string
-): Promise<Conversation[]> {
-  const rows = await sql`
-    SELECT
-      id,
-      user_id as "userId",
-      title,
-      last_message_at as "lastMessageAt",
-      created_at as "createdAt",
-      updated_at as "updatedAt"
-    FROM conversations
-    WHERE user_id = ${userId}
-    ORDER BY
-      COALESCE(last_message_at, created_at) DESC
-  `;
+/** Get all conversations for a user, ordered by most recent */
+export const getUserConversations = async (userId: string): Promise<Conversation[]> => {
+  return await db
+    .select()
+    .from(conversations)
+    .where(eq(conversations.userId, userId))
+    .orderBy(desc(sql`COALESCE(${conversations.lastMessageAt}, ${conversations.createdAt})`));
+};
 
-  return rows as Conversation[];
-}
-
-/**
- * Get a single conversation by ID
- */
-export async function getConversation(
+/** Get a single conversation by ID */
+export const getConversation = async (
   conversationId: string,
   userId: string
-): Promise<Conversation | null> {
-  const rows = await sql`
-    SELECT
-      id,
-      user_id as "userId",
-      title,
-      last_message_at as "lastMessageAt",
-      created_at as "createdAt",
-      updated_at as "updatedAt"
-    FROM conversations
-    WHERE id = ${conversationId}
-      AND user_id = ${userId}
-  `;
+): Promise<Conversation | null> => {
+  const [result] = await db
+    .select()
+    .from(conversations)
+    .where(and(eq(conversations.id, conversationId), eq(conversations.userId, userId)))
+    .limit(1);
 
-  return rows.length > 0 ? (rows[0] as Conversation) : null;
-}
+  return result ?? null;
+};
 
-/**
- * Get a conversation with all its messages
- */
-export async function getConversationWithMessages(
+/** Get a conversation with all its messages */
+export const getConversationWithMessages = async (
   conversationId: string,
   userId: string
-): Promise<ConversationWithMessages | null> {
-  const conversation = await getConversation(conversationId, userId);
+): Promise<ConversationWithMessages | null> => {
+  const [conversation, conversationMessages] = await Promise.all([
+    getConversation(conversationId, userId),
+    getConversationMessages(conversationId),
+  ]);
 
-  if (!conversation) {
-    return null;
-  }
+  return conversation ? { ...conversation, messages: conversationMessages } : null;
+};
 
-  const messages = await getConversationMessages(conversationId);
-
-  return {
-    ...conversation,
-    messages,
-  };
-}
-
-/**
- * Create a new conversation
- */
-export async function createConversation(
+/** Create a new conversation */
+export const createConversation = async (
   userId: string,
   input: CreateConversationInput = {}
-): Promise<Conversation> {
-  const rows = await sql`
-    INSERT INTO conversations (user_id, title)
-    VALUES (${userId}, ${input.title || null})
-    RETURNING
-      id,
-      user_id as "userId",
-      title,
-      last_message_at as "lastMessageAt",
-      created_at as "createdAt",
-      updated_at as "updatedAt"
-  `;
+): Promise<Conversation> => {
+  const [result] = await db
+    .insert(conversations)
+    .values({ userId, title: input.title ?? null })
+    .returning();
 
-  return rows[0] as Conversation;
-}
+  return result;
+};
 
-/**
- * Update a conversation
- */
-export async function updateConversation(
+/** Update a conversation */
+export const updateConversation = async (
   conversationId: string,
   userId: string,
   input: UpdateConversationInput
-): Promise<Conversation | null> {
-  if (input.title === undefined) {
-    return getConversation(conversationId, userId);
-  }
+): Promise<Conversation | null> => {
+  if (!input.title) return getConversation(conversationId, userId);
 
-  const rows = await sql`
-    UPDATE conversations
-    SET title = ${input.title}
-    WHERE id = ${conversationId}
-      AND user_id = ${userId}
-    RETURNING
-      id,
-      user_id as "userId",
-      title,
-      last_message_at as "lastMessageAt",
-      created_at as "createdAt",
-      updated_at as "updatedAt"
-  `;
+  const [result] = await db
+    .update(conversations)
+    .set({ title: input.title })
+    .where(and(eq(conversations.id, conversationId), eq(conversations.userId, userId)))
+    .returning();
 
-  return rows.length > 0 ? (rows[0] as Conversation) : null;
-}
+  return result ?? null;
+};
 
-/**
- * Delete a conversation
- */
-export async function deleteConversation(
+/** Delete a conversation */
+export const deleteConversation = async (
   conversationId: string,
   userId: string
-): Promise<boolean> {
-  const result = await sql`
-    DELETE FROM conversations
-    WHERE id = ${conversationId}
-      AND user_id = ${userId}
-  `;
+): Promise<boolean> => {
+  const result = await db
+    .delete(conversations)
+    .where(and(eq(conversations.id, conversationId), eq(conversations.userId, userId)));
 
-  return result.count > 0;
-}
+  return (result.rowCount ?? 0) > 0;
+};
 
-/**
- * Update conversation's last_message_at timestamp
- */
-export async function updateConversationTimestamp(
-  conversationId: string
-): Promise<void> {
-  await sql`
-    UPDATE conversations
-    SET last_message_at = CURRENT_TIMESTAMP
-    WHERE id = ${conversationId}
-  `;
-}
+/** Update conversation's last_message_at timestamp */
+const updateConversationTimestamp = async (conversationId: string): Promise<void> => {
+  await db
+    .update(conversations)
+    .set({ lastMessageAt: new Date() })
+    .where(eq(conversations.id, conversationId));
+};
 
 // ==========================================
 // Message Queries
 // ==========================================
 
-/**
- * Get all messages for a conversation
- */
-export async function getConversationMessages(
-  conversationId: string
-): Promise<Message[]> {
-  const rows = await sql`
-    SELECT
-      id,
-      conversation_id as "conversationId",
-      role,
-      content,
-      metadata,
-      created_at as "createdAt"
-    FROM messages
-    WHERE conversation_id = ${conversationId}
-    ORDER BY created_at ASC
-  `;
+/** Get all messages for a conversation */
+export const getConversationMessages = async (conversationId: string): Promise<Message[]> => {
+  return await db
+    .select()
+    .from(messages)
+    .where(eq(messages.conversationId, conversationId))
+    .orderBy(messages.createdAt) as Message[];
+};
 
-  return rows as Message[];
-}
+/** Get a single message by ID */
+export const getMessage = async (messageId: string): Promise<Message | null> => {
+  const [result] = await db
+    .select()
+    .from(messages)
+    .where(eq(messages.id, messageId))
+    .limit(1);
 
-/**
- * Get a single message by ID
- */
-export async function getMessage(
-  messageId: string
-): Promise<Message | null> {
-  const rows = await sql`
-    SELECT
-      id,
-      conversation_id as "conversationId",
-      role,
-      content,
-      metadata,
-      created_at as "createdAt"
-    FROM messages
-    WHERE id = ${messageId}
-  `;
+  return (result ?? null) as Message | null;
+};
 
-  return rows.length > 0 ? (rows[0] as Message) : null;
-}
+/** Create a new message */
+export const createMessage = async (input: CreateMessageInput): Promise<Message> => {
+  const [result] = await db
+    .insert(messages)
+    .values({
+      conversationId: input.conversationId,
+      role: input.role,
+      content: input.content,
+      metadata: input.metadata ?? {},
+    })
+    .returning();
 
-/**
- * Create a new message
- */
-export async function createMessage(
-  input: CreateMessageInput
-): Promise<Message> {
-  const rows = await sql`
-    INSERT INTO messages (conversation_id, role, content, metadata)
-    VALUES (
-      ${input.conversationId},
-      ${input.role},
-      ${input.content},
-      ${JSON.stringify(input.metadata || {})}
-    )
-    RETURNING
-      id,
-      conversation_id as "conversationId",
-      role,
-      content,
-      metadata,
-      created_at as "createdAt"
-  `;
+  // Update conversation timestamp in parallel (don't await)
+  updateConversationTimestamp(input.conversationId);
 
-  // Update conversation timestamp
-  await updateConversationTimestamp(input.conversationId);
+  return result as Message;
+};
 
-  return rows[0] as Message;
-}
+/** Create multiple messages in a transaction */
+export const createMessages = async (inputs: CreateMessageInput[]): Promise<Message[]> => {
+  if (!inputs.length) return [];
 
-/**
- * Create multiple messages in a transaction
- */
-export async function createMessages(
-  inputs: CreateMessageInput[]
-): Promise<Message[]> {
-  if (inputs.length === 0) {
-    return [];
-  }
+  return Promise.all(inputs.map(createMessage));
+};
 
-  const messages: Message[] = [];
+/** Delete a message */
+export const deleteMessage = async (messageId: string): Promise<boolean> => {
+  const result = await db.delete(messages).where(eq(messages.id, messageId));
+  return (result.rowCount ?? 0) > 0;
+};
 
-  for (const input of inputs) {
-    const message = await createMessage(input);
-    messages.push(message);
-  }
+/** Get the count of messages in a conversation */
+export const getConversationMessageCount = async (conversationId: string): Promise<number> => {
+  const [result] = await db
+    .select({ count: count() })
+    .from(messages)
+    .where(eq(messages.conversationId, conversationId));
 
-  return messages;
-}
-
-/**
- * Delete a message
- */
-export async function deleteMessage(messageId: string): Promise<boolean> {
-  const result = await sql`
-    DELETE FROM messages
-    WHERE id = ${messageId}
-  `;
-
-  return result.count > 0;
-}
-
-/**
- * Get the count of messages in a conversation
- */
-export async function getConversationMessageCount(
-  conversationId: string
-): Promise<number> {
-  const rows = await sql`
-    SELECT COUNT(*) as count
-    FROM messages
-    WHERE conversation_id = ${conversationId}
-  `;
-
-  return parseInt(rows[0].count as string, 10);
-}
+  return result?.count ?? 0;
+};

@@ -100,7 +100,7 @@ export async function generateGeminiResponse(
     const response = await ai.models.generateContent({
       model: 'gemini-2.0-flash-exp',
       contents: contents as any,
-      generationConfig: {
+      config: {
         maxOutputTokens: 1000,
         temperature: 0.7,
         topP: 0.95,
