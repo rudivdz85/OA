@@ -1,5 +1,5 @@
 import { db } from './client';
-import { conversations, messages } from './schema';
+import { conversations, messages, assessmentTypes, assessments } from './schema';
 import { eq, desc, and, sql, count } from 'drizzle-orm';
 import type {
   Conversation,
@@ -8,7 +8,12 @@ import type {
   CreateConversationInput,
   UpdateConversationInput,
   CreateMessageInput,
+  Assessment,
+  AssessmentWithType,
+  CreateAssessmentInput,
+  UpdateAssessmentInput,
 } from '@/types';
+import type { AssessmentType } from './schema';
 
 // ==========================================
 // Conversation Queries
@@ -163,4 +168,191 @@ export const getConversationMessageCount = async (conversationId: string): Promi
     .where(eq(messages.conversationId, conversationId));
 
   return result?.count ?? 0;
+};
+
+// ==========================================
+// Assessment Type Queries
+// ==========================================
+
+/** Get all active assessment types */
+export const getActiveAssessmentTypes = async (): Promise<AssessmentType[]> => {
+  return await db
+    .select()
+    .from(assessmentTypes)
+    .where(eq(assessmentTypes.isActive, true))
+    .orderBy(assessmentTypes.name);
+};
+
+/** Get assessment type by code (e.g., 'GAD7') */
+export const getAssessmentTypeByCode = async (code: string): Promise<AssessmentType | null> => {
+  const [result] = await db
+    .select()
+    .from(assessmentTypes)
+    .where(and(eq(assessmentTypes.code, code), eq(assessmentTypes.isActive, true)))
+    .limit(1);
+
+  return result ?? null;
+};
+
+/** Get assessment type by ID */
+export const getAssessmentTypeById = async (id: string): Promise<AssessmentType | null> => {
+  const [result] = await db
+    .select()
+    .from(assessmentTypes)
+    .where(eq(assessmentTypes.id, id))
+    .limit(1);
+
+  return result ?? null;
+};
+
+// ==========================================
+// Assessment Queries
+// ==========================================
+
+/** Create a new assessment */
+export const createAssessment = async (
+  userId: string,
+  assessmentTypeId: string,
+  conversationId?: string
+): Promise<Assessment> => {
+  const assessmentType = await getAssessmentTypeById(assessmentTypeId);
+  if (!assessmentType) {
+    throw new Error('Assessment type not found');
+  }
+
+  const [result] = await db
+    .insert(assessments)
+    .values({
+      userId,
+      assessmentTypeId,
+      conversationId: conversationId ?? null,
+      assessmentVersion: assessmentType.version,
+      status: 'in_progress',
+      currentQuestionIndex: 0,
+      answers: [],
+    })
+    .returning();
+
+  return result as Assessment;
+};
+
+/** Get assessment by ID */
+export const getAssessment = async (
+  assessmentId: string,
+  userId: string
+): Promise<Assessment | null> => {
+  const [result] = await db
+    .select()
+    .from(assessments)
+    .where(and(eq(assessments.id, assessmentId), eq(assessments.userId, userId)))
+    .limit(1);
+
+  return (result ?? null) as Assessment | null;
+};
+
+/** Get assessment with type information */
+export const getAssessmentWithType = async (
+  assessmentId: string,
+  userId: string
+): Promise<AssessmentWithType | null> => {
+  const [assessment, assessmentTypeData] = await Promise.all([
+    getAssessment(assessmentId, userId),
+    db
+      .select()
+      .from(assessmentTypes)
+      .innerJoin(assessments, eq(assessments.assessmentTypeId, assessmentTypes.id))
+      .where(and(eq(assessments.id, assessmentId), eq(assessments.userId, userId)))
+      .limit(1),
+  ]);
+
+  if (!assessment || !assessmentTypeData[0]) return null;
+
+  return {
+    ...assessment,
+    assessmentType: assessmentTypeData[0].assessment_types,
+  } as AssessmentWithType;
+};
+
+/** Update assessment answers */
+export const updateAssessmentAnswers = async (
+  assessmentId: string,
+  userId: string,
+  answers: Array<{ questionId: number; answer: number; timestamp: string }>,
+  currentQuestionIndex?: number
+): Promise<Assessment | null> => {
+  const updateData: any = {
+    answers,
+    updatedAt: new Date(),
+  };
+
+  if (currentQuestionIndex !== undefined) {
+    updateData.currentQuestionIndex = currentQuestionIndex;
+  }
+
+  const [result] = await db
+    .update(assessments)
+    .set(updateData)
+    .where(and(eq(assessments.id, assessmentId), eq(assessments.userId, userId)))
+    .returning();
+
+  return (result ?? null) as Assessment | null;
+};
+
+/** Complete assessment with score and severity */
+export const completeAssessment = async (
+  assessmentId: string,
+  userId: string,
+  score: number,
+  severityLevel: string
+): Promise<Assessment | null> => {
+  const [result] = await db
+    .update(assessments)
+    .set({
+      score,
+      severityLevel,
+      status: 'completed',
+      completedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(and(eq(assessments.id, assessmentId), eq(assessments.userId, userId)))
+    .returning();
+
+  return (result ?? null) as Assessment | null;
+};
+
+/** Get all assessments for a user */
+export const getUserAssessments = async (userId: string): Promise<Assessment[]> => {
+  return await db
+    .select()
+    .from(assessments)
+    .where(eq(assessments.userId, userId))
+    .orderBy(desc(assessments.createdAt)) as Assessment[];
+};
+
+/** Get assessments for a specific conversation */
+export const getConversationAssessments = async (
+  conversationId: string
+): Promise<Assessment[]> => {
+  return await db
+    .select()
+    .from(assessments)
+    .where(eq(assessments.conversationId, conversationId))
+    .orderBy(desc(assessments.createdAt)) as Assessment[];
+};
+
+/** Mark assessment as abandoned */
+export const abandonAssessment = async (
+  assessmentId: string,
+  userId: string
+): Promise<Assessment | null> => {
+  const [result] = await db
+    .update(assessments)
+    .set({
+      status: 'abandoned',
+      updatedAt: new Date(),
+    })
+    .where(and(eq(assessments.id, assessmentId), eq(assessments.userId, userId)))
+    .returning();
+
+  return (result ?? null) as Assessment | null;
 };
