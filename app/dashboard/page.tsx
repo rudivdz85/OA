@@ -11,6 +11,10 @@ import { MessageCircle, FileText, ArrowRight, TrendingUp } from 'lucide-react';
 import StartConversationButton from '@/components/dashboard/StartConversationButton';
 import TakeAssessmentSection from '@/components/dashboard/TakeAssessmentSection';
 
+// Force dynamic rendering and disable caching
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 async function DashboardContent() {
   const session = await getServerSession(authOptions);
 
