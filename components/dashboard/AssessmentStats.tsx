@@ -55,7 +55,16 @@ export const AssessmentStats = ({ stats }: AssessmentStatsProps) => {
 
   const getTrendText = () => {
     if (stats.trend === 'none') return 'No trend data yet';
-    if (stats.improvement === null) return 'N/A';
+
+    // Handle special case: trend exists but no percentage (e.g., starting from 0)
+    if (stats.improvement === null) {
+      if (stats.trend === 'worsening') {
+        return 'Scores increased from baseline';
+      } else if (stats.trend === 'improving') {
+        return 'Scores decreased from baseline';
+      }
+      return 'N/A';
+    }
 
     const absImprovement = Math.abs(stats.improvement);
     if (stats.trend === 'improving') {

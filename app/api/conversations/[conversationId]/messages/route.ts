@@ -24,7 +24,7 @@ import { checkForMilestone } from '@/lib/assessments/achievements';
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { conversationId: string } }
+  { params }: { params: Promise<{ conversationId: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -36,7 +36,7 @@ export async function GET(
       );
     }
 
-    const conversationId = params.conversationId;
+    const { conversationId } = await params;
 
     // Verify conversation belongs to user
     const conversation = await getConversation(conversationId, session.user.id);
@@ -71,7 +71,7 @@ export async function GET(
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { conversationId: string } }
+  { params }: { params: Promise<{ conversationId: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -83,7 +83,7 @@ export async function POST(
       );
     }
 
-    const conversationId = params.conversationId;
+    const { conversationId } = await params;
 
     // Verify conversation belongs to user
     const conversation = await getConversation(conversationId, session.user.id);
@@ -95,7 +95,11 @@ export async function POST(
     }
 
     const body = await request.json();
-    const { content, stream = true, recentAssessmentId } = body;
+    const { content, stream = true, recentAssessmentId, assessmentHistory, displayContent } = body;
+
+    // Use displayContent for storage if provided, otherwise use content
+    const contentToStore = displayContent || content;
+    const contentForAI = content;
 
     if (!content || typeof content !== 'string' || content.trim().length === 0) {
       return NextResponse.json(
@@ -109,20 +113,25 @@ export async function POST(
       return handleStreamingResponse(
         conversationId,
         session.user.id,
-        content.trim(),
+        contentToStore.trim(),
+        contentForAI.trim(),
         conversation,
-        recentAssessmentId
+        recentAssessmentId,
+        assessmentHistory
       );
     }
 
     // Get existing messages for context
     const existingMessages = await getConversationMessages(conversationId);
 
-    // Create user message
+    // Create user message (use contentToStore)
     const userMessageInput: CreateMessageInput = {
       conversationId,
       role: 'user',
-      content: content.trim(),
+      content: contentToStore.trim(),
+      metadata: recentAssessmentId
+        ? { assessmentId: recentAssessmentId, assessmentHistory }
+        : {},
     };
 
     const userMessage = await createMessage(userMessageInput);
@@ -130,7 +139,7 @@ export async function POST(
     // Generate title for first message if conversation doesn't have one
     if (!conversation.title && existingMessages.length === 0) {
       try {
-        const title = await generateConversationTitle(content.trim());
+        const title = await generateConversationTitle(contentForAI.trim());
         await updateConversation(conversationId, session.user.id, { title });
       } catch (error) {
         console.error('Error generating conversation title:', error);
@@ -138,12 +147,12 @@ export async function POST(
       }
     }
 
-    // Generate AI response
+    // Generate AI response (use contentForAI)
     let assistantMessage;
     try {
       const aiResponse = await generateGeminiResponse(
         existingMessages,
-        content.trim()
+        contentForAI.trim()
       );
 
       // Create assistant message with assessment offer metadata if present
@@ -203,9 +212,11 @@ export async function POST(
 async function handleStreamingResponse(
   conversationId: string,
   userId: string,
-  content: string,
+  contentToStore: string,
+  contentForAI: string,
   conversation: any,
-  recentAssessmentId?: string
+  recentAssessmentId?: string,
+  assessmentHistory?: string
 ) {
   const encoder = new TextEncoder();
 
@@ -216,11 +227,14 @@ async function handleStreamingResponse(
         // Get existing messages for context
         const existingMessages = await getConversationMessages(conversationId);
 
-        // Create user message
+        // Create user message (store display content)
         const userMessageInput: CreateMessageInput = {
           conversationId,
           role: 'user',
-          content,
+          content: contentToStore,
+          metadata: recentAssessmentId
+            ? { assessmentId: recentAssessmentId, assessmentHistory }
+            : {},
         };
 
         const userMessage = await createMessage(userMessageInput);
@@ -239,7 +253,7 @@ async function handleStreamingResponse(
         // Generate title for first message if needed
         if (!conversation.title && existingMessages.length === 0) {
           try {
-            const title = await generateConversationTitle(content);
+            const title = await generateConversationTitle(contentForAI);
             await updateConversation(conversationId, userId, { title });
           } catch (error) {
             console.error('Error generating conversation title:', error);
@@ -252,12 +266,12 @@ async function handleStreamingResponse(
           milestoneData = await checkForMilestone(userId, recentAssessmentId);
         }
 
-        // Stream AI response
+        // Stream AI response (use full context for AI)
         let fullResponse = '';
         try {
           for await (const chunk of generateGeminiStreamingResponse(
             existingMessages,
-            content
+            contentForAI
           )) {
             fullResponse += chunk;
 

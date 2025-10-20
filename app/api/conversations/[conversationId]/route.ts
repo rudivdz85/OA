@@ -14,7 +14,7 @@ import { UpdateConversationInput } from '@/types';
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { conversationId: string } }
+  { params }: { params: Promise<{ conversationId: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -26,7 +26,7 @@ export async function GET(
       );
     }
 
-    const conversationId = params.conversationId;
+    const { conversationId } = await params;
     const conversation = await getConversationWithMessages(
       conversationId,
       session.user.id
@@ -61,7 +61,7 @@ export async function GET(
  */
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { conversationId: string } }
+  { params }: { params: Promise<{ conversationId: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -74,7 +74,7 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const conversationId = params.conversationId;
+    const { conversationId } = await params;
 
     const input: UpdateConversationInput = {
       title: body.title,
@@ -115,7 +115,7 @@ export async function PUT(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { conversationId: string } }
+  { params }: { params: Promise<{ conversationId: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -127,7 +127,7 @@ export async function DELETE(
       );
     }
 
-    const conversationId = params.conversationId;
+    const { conversationId } = await params;
     const success = await deleteConversation(conversationId, session.user.id);
 
     if (!success) {

@@ -6,10 +6,12 @@ import Message from './Message';
 import { AssessmentOffer } from './AssessmentOffer';
 import { AssessmentQuiz } from './AssessmentQuiz';
 import { AssessmentResult } from './AssessmentResult';
+import { AssessmentIndicator } from './AssessmentIndicator';
 import { MilestoneAchievement } from './MilestoneAchievement';
 import { Send, Loader2 } from 'lucide-react';
 import { useStreamingChat } from '@/hooks/useStreamingChat';
 import { MilestoneData } from '@/lib/assessments/achievements';
+import { determineSeverityLevel } from '@/lib/assessments/scoring';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -27,8 +29,8 @@ export default function ChatInterface({
   const [isLoading, setIsLoading] = useState(false);
   const [activeAssessment, setActiveAssessment] = useState<any>(null);
   const [completedAssessmentResult, setCompletedAssessmentResult] = useState<any>(null);
+  const [completedAssessments, setCompletedAssessments] = useState<Map<string, any>>(new Map());
   const [milestone, setMilestone] = useState<MilestoneData | null>(null);
-  const [recentAssessmentId, setRecentAssessmentId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -40,6 +42,50 @@ export default function ChatInterface({
     },
   });
 
+  // Load assessment details for messages with assessmentId
+  useEffect(() => {
+    const loadAssessments = async () => {
+      for (const message of messages) {
+        if (message.metadata?.assessmentId && !completedAssessments.has(message.metadata.assessmentId)) {
+          try {
+            const response = await fetch(`/api/assessments/${message.metadata.assessmentId}`);
+            if (response.ok) {
+              const data = await response.json();
+
+              // Fetch assessment type details
+              const typeResponse = await fetch(`/api/assessments/types/${data.data.assessmentTypeId}`);
+              if (typeResponse.ok) {
+                const typeData = await typeResponse.json();
+
+                // Calculate interpretation and recommendation
+                const result = determineSeverityLevel(data.data.score, typeData.data);
+
+                const assessmentResult = {
+                  assessment: {
+                    ...data.data,
+                    assessmentType: typeData.data,
+                  },
+                  interpretation: result.interpretation,
+                  recommendation: result.recommendation,
+                };
+
+                setCompletedAssessments(prev => {
+                  const newMap = new Map(prev);
+                  newMap.set(message.metadata.assessmentId, assessmentResult);
+                  return newMap;
+                });
+              }
+            }
+          } catch (error) {
+            console.error('Error loading assessment:', error);
+          }
+        }
+      }
+    };
+
+    loadAssessments();
+  }, [messages, completedAssessments]);
+
   // Auto-scroll to bottom when new messages arrive
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -47,7 +93,7 @@ export default function ChatInterface({
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, activeAssessment, completedAssessmentResult, streamingText, milestone]);
+  }, [messages, completedAssessmentResult, streamingText, milestone]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -112,26 +158,66 @@ export default function ChatInterface({
 
       const data = await response.json();
 
-      // Store result for display
-      setCompletedAssessmentResult({
+      const assessmentResult = {
         assessment: {
           ...data.data,
           assessmentType: activeAssessment.assessmentType,
         },
         interpretation: data.result.interpretation,
         recommendation: data.result.recommendation,
-      });
+      };
 
-      // Store assessment ID for milestone detection
-      setRecentAssessmentId(data.data.id);
+      // Store result for display
+      setCompletedAssessmentResult(assessmentResult);
+
+      // Store in permanent map for later access
+      setCompletedAssessments(prev => {
+        const newMap = new Map(prev);
+        newMap.set(data.data.id, assessmentResult);
+        return newMap;
+      });
 
       // Clear active assessment
       setActiveAssessment(null);
 
-      // Send assessment result to AI for feedback (with streaming)
-      const scoreMessage = `I just completed the ${activeAssessment.assessmentType.name}. My score was ${data.result.score} out of ${activeAssessment.assessmentType.maxScore}, which indicates ${data.result.severityLevel} severity.`;
+      // Fetch user's assessment history for context
+      let assessmentHistory = [];
+      try {
+        const historyResponse = await fetch('/api/assessments/history');
+        if (historyResponse.ok) {
+          const historyData = await historyResponse.json();
+          assessmentHistory = historyData.data || [];
+        }
+      } catch (error) {
+        console.error('Error fetching assessment history:', error);
+      }
 
-      await sendMessage(scoreMessage, data.data.id);
+      // Build context messages - one for display, one for AI
+      const displayMessage = `I just completed the ${activeAssessment.assessmentType.name}. My score was ${data.result.score} out of ${activeAssessment.assessmentType.maxScore}, which indicates ${data.result.severityLevel} severity.`;
+
+      let fullContextMessage = displayMessage;
+      let historyText = '';
+
+      if (assessmentHistory.length > 1) {
+        // More than 1 means there are previous assessments (current one is included)
+        historyText = 'My assessment history:';
+
+        // Sort by date, most recent first
+        const sortedHistory = [...assessmentHistory].sort((a, b) =>
+          new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime()
+        );
+
+        sortedHistory.forEach((assessment, index) => {
+          const date = new Date(assessment.completedAt).toLocaleDateString();
+          const isCurrent = assessment.id === data.data.id;
+          // API returns flat structure with assessmentTypeName and maxScore
+          historyText += `\n${index + 1}. ${assessment.assessmentTypeName} - Score: ${assessment.score}/${assessment.maxScore} (${assessment.severityLevel})${isCurrent ? ' [Just completed]' : ` on ${date}`}`;
+        });
+
+        fullContextMessage = `${displayMessage}\n\n${historyText}`;
+      }
+
+      await sendMessage(displayMessage, data.data.id, fullContextMessage, historyText);
     } catch (error) {
       console.error('Error completing assessment:', error);
       alert('Failed to submit assessment. Please try again.');
@@ -142,14 +228,24 @@ export default function ChatInterface({
     setActiveAssessment(null);
   };
 
-  const sendMessage = async (content: string, assessmentId?: string) => {
-    // Immediately add user message to UI
+  const sendMessage = async (
+    content: string,
+    assessmentId?: string,
+    fullContextForAI?: string,
+    assessmentHistory?: string
+  ) => {
+    // Use fullContextForAI for the API call if provided, otherwise use content
+    const messageForAI = fullContextForAI || content;
+
+    // Immediately add user message to UI (using display content, not full context)
     const optimisticUserMessage: MessageType = {
       id: `temp-${Date.now()}`,
       conversationId,
       role: 'user',
       content,
-      metadata: {},
+      metadata: assessmentId
+        ? { assessmentId, assessmentHistory }
+        : {},
       createdAt: new Date(),
     };
     setMessages((prev) => [...prev, optimisticUserMessage]);
@@ -157,8 +253,13 @@ export default function ChatInterface({
     setIsLoading(true);
 
     try {
-      // Use streaming for message sending
-      const result = await sendStreamingMessage(content, assessmentId || undefined);
+      // Use streaming for message sending (send full context to AI, but display short content)
+      const result = await sendStreamingMessage(
+        messageForAI,
+        assessmentId || undefined,
+        assessmentHistory,
+        content // displayContent - what to show in UI
+      );
 
       if (result) {
         // Replace temp user message with real one, add assistant message
@@ -166,11 +267,6 @@ export default function ChatInterface({
           const filtered = prev.filter((m) => m.id !== optimisticUserMessage.id);
           return [...filtered, result.userMessage, result.assistantMessage];
         });
-      }
-
-      // Clear recent assessment ID after using it
-      if (assessmentId) {
-        setRecentAssessmentId(null);
       }
     } catch (error) {
       console.error('Error sending message:', error);
@@ -191,6 +287,11 @@ export default function ChatInterface({
 
     const userContent = input.trim();
     setInput('');
+
+    // Clear completed assessment result when user sends a new message
+    if (completedAssessmentResult) {
+      setCompletedAssessmentResult(null);
+    }
 
     await sendMessage(userContent);
     textareaRef.current?.focus();
@@ -250,6 +351,51 @@ export default function ChatInterface({
                       }}
                     />
                   )}
+
+                {/* Render assessment indicator if this message has a completed assessment */}
+                {message.role === 'user' &&
+                  message.metadata?.assessmentId &&
+                  (() => {
+                    // Check if this is the message for the currently completed assessment
+                    const isCurrentlyCompleted = completedAssessmentResult &&
+                      completedAssessmentResult.assessment.id === message.metadata.assessmentId;
+
+                    // If it's currently completed, show the completedAssessmentResult
+                    if (isCurrentlyCompleted) {
+                      return (
+                        <AssessmentIndicator
+                          assessment={completedAssessmentResult.assessment}
+                          interpretation={completedAssessmentResult.interpretation}
+                          recommendation={completedAssessmentResult.recommendation}
+                          defaultExpanded={true}
+                        />
+                      );
+                    }
+
+                    // Otherwise, check if it's in the Map and show from history
+                    if (completedAssessments.has(message.metadata.assessmentId)) {
+                      const assessmentData = completedAssessments.get(message.metadata.assessmentId);
+                      if (!assessmentData) return null;
+
+                      // Find the most recent assessment message to expand it by default
+                      const assessmentMessages = messages.filter(m =>
+                        m.role === 'user' && m.metadata?.assessmentId
+                      );
+                      const isLatestAssessment = assessmentMessages.length > 0 &&
+                        assessmentMessages[assessmentMessages.length - 1].id === message.id;
+
+                      return (
+                        <AssessmentIndicator
+                          assessment={assessmentData.assessment}
+                          interpretation={assessmentData.interpretation}
+                          recommendation={assessmentData.recommendation}
+                          defaultExpanded={isLatestAssessment}
+                        />
+                      );
+                    }
+
+                    return null;
+                  })()}
               </div>
             ))}
 
@@ -259,15 +405,6 @@ export default function ChatInterface({
                 assessment={activeAssessment}
                 onComplete={handleCompleteAssessment}
                 onCancel={handleCancelAssessment}
-              />
-            )}
-
-            {/* Completed assessment result */}
-            {completedAssessmentResult && (
-              <AssessmentResult
-                assessment={completedAssessmentResult.assessment}
-                interpretation={completedAssessmentResult.interpretation}
-                recommendation={completedAssessmentResult.recommendation}
               />
             )}
 

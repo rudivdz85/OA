@@ -7,9 +7,9 @@ import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 
 interface ChatPageProps {
-  params: {
+  params: Promise<{
     conversationId: string;
-  };
+  }>;
 }
 
 export default async function ChatPage({ params }: ChatPageProps) {
@@ -19,8 +19,9 @@ export default async function ChatPage({ params }: ChatPageProps) {
     redirect('/auth/login');
   }
 
+  const { conversationId } = await params;
   const conversation = await getConversationWithMessages(
-    params.conversationId,
+    conversationId,
     session.user.id
   );
 

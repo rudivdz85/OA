@@ -2,7 +2,7 @@
 
 import { signIn, useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import Link from 'next/link';
 import { FormInput } from '@/components/auth/FormInput';
 import { PasswordInput } from '@/components/auth/PasswordInput';
@@ -10,7 +10,7 @@ import { SubmitButton } from '@/components/auth/SubmitButton';
 import { AuthDivider } from '@/components/auth/AuthDivider';
 import { AlertCircle } from 'lucide-react';
 
-export default function SignInPage() {
+function SignInForm() {
   const { status } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -199,5 +199,17 @@ export default function SignInPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function SignInPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-50 to-purple-100">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-600"></div>
+      </div>
+    }>
+      <SignInForm />
+    </Suspense>
   );
 }

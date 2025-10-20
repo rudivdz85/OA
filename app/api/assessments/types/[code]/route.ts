@@ -5,7 +5,7 @@ import { getAssessmentTypeByCode } from '@/lib/db/queries';
 
 export async function GET(
   request: NextRequest,
-  context: { params: { code: string } }
+  context: { params: Promise<{ code: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -17,7 +17,8 @@ export async function GET(
       );
     }
 
-    const code = context.params.code;
+    const params = await context.params;
+    const code = params.code;
     const assessmentType = await getAssessmentTypeByCode(code);
 
     if (!assessmentType) {

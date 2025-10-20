@@ -45,13 +45,13 @@ export const config = {
   matcher: [
     /*
      * Match all request paths except for the ones starting with:
-     * - / (home page)
+     * - / (home page - exact match)
      * - /api/auth (NextAuth API routes)
      * - /auth (auth pages)
      * - /_next (Next.js internals)
      * - /static (static files)
      * - /favicon.ico, /robots.txt (static files)
      */
-    '/((?!api/auth|auth|_next|static|favicon.ico|robots.txt).*)',
+    '/((?!$|api/auth|auth|_next|static|favicon.ico|robots.txt).*)',
   ],
 };

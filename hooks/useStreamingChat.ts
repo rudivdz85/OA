@@ -23,7 +23,9 @@ export function useStreamingChat({ conversationId, onMilestone }: UseStreamingCh
   const sendStreamingMessage = useCallback(
     async (
       content: string,
-      recentAssessmentId?: string
+      recentAssessmentId?: string,
+      assessmentHistory?: string,
+      displayContent?: string
     ): Promise<{ userMessage: MessageType; assistantMessage: MessageType } | null> => {
       setIsStreaming(true);
       setStreamingText('');
@@ -41,6 +43,8 @@ export function useStreamingChat({ conversationId, onMilestone }: UseStreamingCh
             content,
             stream: true,
             recentAssessmentId,
+            assessmentHistory,
+            displayContent,
           }),
           signal: abortControllerRef.current.signal,
         });
@@ -118,8 +122,10 @@ export function useStreamingChat({ conversationId, onMilestone }: UseStreamingCh
             id: userMessageId,
             conversationId,
             role: 'user',
-            content,
-            metadata: {},
+            content: displayContent || content,
+            metadata: recentAssessmentId
+              ? { assessmentId: recentAssessmentId, assessmentHistory }
+              : {},
             createdAt: new Date(),
           } as MessageType,
           assistantMessage: {

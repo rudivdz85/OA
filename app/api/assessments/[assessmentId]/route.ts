@@ -11,7 +11,7 @@ import { calculateScore, determineSeverityLevel, validateAnswers } from '@/lib/a
 
 export async function GET(
   request: NextRequest,
-  context: { params: { assessmentId: string } }
+  context: { params: Promise<{ assessmentId: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -23,7 +23,8 @@ export async function GET(
       );
     }
 
-    const assessmentId = context.params.assessmentId;
+    const params = await context.params;
+    const assessmentId = params.assessmentId;
     const assessment = await getAssessmentWithType(assessmentId, session.user.id);
 
     if (!assessment) {
@@ -48,7 +49,7 @@ export async function GET(
 
 export async function PATCH(
   request: NextRequest,
-  context: { params: { assessmentId: string } }
+  context: { params: Promise<{ assessmentId: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -60,7 +61,8 @@ export async function PATCH(
       );
     }
 
-    const assessmentId = context.params.assessmentId;
+    const params = await context.params;
+    const assessmentId = params.assessmentId;
     const body = await request.json();
     const { answers, currentQuestionIndex, complete } = body;
 

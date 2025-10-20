@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 import { getUserAssessmentStats, getUserAssessmentHistory } from '@/lib/db/queries';
 import { AssessmentStats } from '@/components/dashboard/AssessmentStats';
 import { AssessmentChart } from '@/components/dashboard/AssessmentChart';
+import { ScoringGuide } from '@/components/dashboard/ScoringGuide';
 import ConversationList from '@/components/dashboard/ConversationList';
 import Link from 'next/link';
 import { MessageCircle, FileText, ArrowRight, TrendingUp } from 'lucide-react';
@@ -59,6 +60,9 @@ async function DashboardContent() {
           <AssessmentStats stats={stats} />
         </div>
       )}
+
+      {/* Scoring Guide */}
+      <ScoringGuide />
 
       {/* Quick Actions */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

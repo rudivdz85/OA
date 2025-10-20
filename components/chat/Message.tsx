@@ -5,6 +5,7 @@ import { format } from 'date-fns';
 import { User, Bot } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { AssessmentHistoryMessage } from './AssessmentHistoryMessage';
 
 interface MessageProps {
   message: MessageType;
@@ -13,6 +14,7 @@ interface MessageProps {
 export default function Message({ message }: MessageProps) {
   const isUser = message.role === 'user';
   const isAssistant = message.role === 'assistant';
+  const hasHistory = isUser && message.metadata?.assessmentHistory;
 
   if (message.role === 'system') {
     return null; // Don't display system messages
@@ -121,6 +123,11 @@ export default function Message({ message }: MessageProps) {
         <span className="text-xs text-gray-500 px-1">
           {format(new Date(message.createdAt), 'h:mm a')}
         </span>
+
+        {/* Assessment History Message if present */}
+        {hasHistory && (
+          <AssessmentHistoryMessage historyText={message.metadata.assessmentHistory} />
+        )}
       </div>
     </div>
   );

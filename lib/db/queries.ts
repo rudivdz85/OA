@@ -439,15 +439,17 @@ export const getUserAssessmentStats = async (userId: string) => {
     // Lower scores are better for anxiety/depression, so improvement means score decreased
     const change = firstScore - latestScore;
 
-    // Handle edge case: if first score is 0, calculate based on absolute change
+    // Handle edge case: if first score is 0
     if (firstScore === 0) {
-      // If starting from 0, any increase is worsening
-      if (latestScore > 0) {
-        trend = 'worsening';
-        improvement = -100; // Represents worsening from baseline of 0
-      } else {
+      if (latestScore === 0) {
+        // Both are 0, stable
         trend = 'stable';
         improvement = 0;
+      } else {
+        // Starting from 0, any positive score is worsening
+        // Use null to indicate we can't calculate a meaningful percentage
+        trend = 'worsening';
+        improvement = null;
       }
     } else {
       // Normal calculation: percentage change from first score

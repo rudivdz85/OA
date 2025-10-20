@@ -213,10 +213,12 @@ async function AssessmentDetailContent({ assessmentId }: AssessmentDetailContent
 }
 
 interface PageProps {
-  params: { assessmentId: string };
+  params: Promise<{ assessmentId: string }>;
 }
 
-export default function AssessmentDetailPage({ params }: PageProps) {
+export default async function AssessmentDetailPage({ params }: PageProps) {
+  const { assessmentId } = await params;
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
       <Suspense
@@ -229,7 +231,7 @@ export default function AssessmentDetailPage({ params }: PageProps) {
           </div>
         }
       >
-        <AssessmentDetailContent assessmentId={params.assessmentId} />
+        <AssessmentDetailContent assessmentId={assessmentId} />
       </Suspense>
     </div>
   );
